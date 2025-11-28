@@ -1,7 +1,6 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "../generated/prisma";
 
 declare global {
-  // وقتی از declare global استفاده می‌کنی، باید export نکرده باشد
   var prisma: PrismaClient | undefined;
 }
 

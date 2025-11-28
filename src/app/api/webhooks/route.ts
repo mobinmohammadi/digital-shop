@@ -1,41 +1,50 @@
-import "dotenv/config";
-import { db } from "./db";
-import { verifyWebhook } from "@clerk/clerk-sdk-node";
-import { serve } from "bun";
+import { verifyWebhook } from "@clerk/nextjs/webhooks";
+import { NextRequest } from "next/server";
+import { db } from "@/lib/db";
+import { User } from "../../../generated/prisma"
 
-serve({
-  port: 3000,
-  async fetch(req) {
-    try {
-      const body = await req.text();
+export async function POST(req: NextRequest) {
+  try {
+    const evt = await verifyWebhook(req);
 
-      const evt = verifyWebhook({
-        rawBody: body,
-        secret: process.env.CLERK_WEBHOOK_SECRET!,
+    if (evt.type === "user.created" || evt.type === "user.updated") {
+      const data = evt.data;
+
+      // ساخت داده از Clerk
+      const userData : Partial<User> = {
+        id: data.id,
+        name: `${data.first_name ?? ""} ${data.last_name ?? ""}`.trim(),
+        email: data.email_addresses[0]?.email_address ?? null,
+        picture: data.image_url ?? null,
+      };
+
+      // ذخیره یا آپدیت در دیتابیس
+      const dbUser = await db.user.upsert({
+        where: {
+          email: userData.email,
+        },
+        update: userData,
+        create: {
+           id : userData.id!,
+           name : userData.name!,
+           email : userData.email!,
+           picture : userData.picture!,
+           role : userData.role || "USER"
+
+        },
       });
+      
+      if(!userData) return
 
-      if (evt.type === "user.created" || evt.type === "user.updated") {
-        const data = evt.data;
+      console.log("User synced:", dbUser);
 
-        const userData = {
-          id: data.id,
-          name: `${data.first_name ?? ""} ${data.last_name ?? ""}`.trim(),
-          email: data.email_addresses[0]?.email_address ?? null,
-          picture: data.image_url ?? null,
-          role: (data.public_metadata?.role as string) ?? "USER",
-        };
 
-        await db.user.upsert({
-          where: { email: userData.email },
-          update: userData,
-          create: userData,
-        });
-      }
 
-      return new Response("Webhook received", { status: 200 });
-    } catch (err) {
-      console.error(err);
-      return new Response("Error verifying webhook", { status: 400 });
     }
-  },
-});
+
+    return new Response("Webhook received", { status: 200 });
+  } catch (err) {
+    console.error("Error verifying webhook:", err);
+    return new Response("Error verifying webhook", { status: 400 });
+  }
+}
