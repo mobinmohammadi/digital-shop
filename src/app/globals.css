@@ -59,3 +59,8 @@
   --color-popover: hsl(var(--popover));
   --color-card: hsl(var(--card));
 }
+
+.container-custom {
+  width: 97%;
+  margin: 0 auto;
+}
